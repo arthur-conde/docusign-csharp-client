@@ -852,6 +852,66 @@ namespace DocuSign.eSign.Client
         }
 
         /// <summary>
+        /// RefreshToken will exchange an existing refresh token for an access token and refresh tokens.
+        /// </summary>
+        /// <param name="clientId">OAuth2 client ID: Identifies the client making the request.</param>
+        /// <param name="clientSecret">the secret key you generated when you set up the integration in DocuSign Admin console.</param>
+        /// <param name="refresh_token">The refresh token that you received from the <i> GenerateAccessToken </i> callback.</param>
+        /// <returns> OAuth.OAuthToken object.
+        /// ApiException if the HTTP call status is different than 2xx.
+        /// IOException  if there is a problem while parsing the response object.
+        /// </returns>
+        public OAuth.OAuthToken RefreshToken(string clientId, string clientSecret, string refresh_token)
+        {
+            if (string.IsNullOrEmpty(clientId) || string.IsNullOrEmpty(clientSecret) || string.IsNullOrEmpty(refresh_token))
+            {
+                throw new ArgumentNullException();
+            }
+
+            string baseUri = string.Format("https://{0}/", GetOAuthBasePath());
+
+            string codeAuth = (clientId ?? "") + ":" + (clientSecret ?? "");
+            byte[] codeAuthBytes = Encoding.UTF8.GetBytes(codeAuth);
+            string codeAuthBase64 = Convert.ToBase64String(codeAuthBytes);
+
+            RestClient restClient = new RestClient(baseUri);
+            restClient.Timeout = Configuration.Timeout;
+            restClient.UserAgent = Configuration.UserAgent;
+
+            RestRequest request = new RestRequest("oauth/token", Method.POST);
+
+            request.AddHeader("Authorization", "Basic " + codeAuthBase64);
+            request.AddHeader("Content-Type", "application/x-www-form-urlencoded");
+
+            Dictionary<string, string> formParams = new Dictionary<string, string>
+            {
+                { "grant_type", "refresh_token" },
+                { "refresh_token", refresh_token }
+            };
+
+            foreach (var item in formParams)
+                request.AddParameter(item.Key, item.Value);
+
+            IRestResponse response = restClient.Execute(request);
+
+            if (response.StatusCode >= HttpStatusCode.OK && response.StatusCode < HttpStatusCode.BadRequest)
+            {
+                OAuth.OAuthToken tokenObj = JsonConvert.DeserializeObject<OAuth.OAuthToken>(((RestResponse)response).Content);
+
+                // Add the token to this ApiClient
+                string authHeader = "Bearer " + tokenObj.access_token;
+                this.Configuration.AddDefaultHeader("Authorization", authHeader);
+                return tokenObj;
+            }
+            else
+            {
+                throw new ApiException((int)response.StatusCode,
+                  "Error while requesting server, received a non successful HTTP code "
+                  + response.ResponseStatus + " with response Body: " + response.Content, response.Content);
+            }
+        }
+
+        /// <summary>
         /// Get User Info method takes the accessToken to retrieve User Account Data.
         /// </summary>
         /// <param name="accessToken"></param>
